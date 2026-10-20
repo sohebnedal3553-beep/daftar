@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1d4e43">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>دفتر الحساب</title>
+<style>
+/* Layout: one narrow phone column. Balance on top, entry form, then ledger list. */
+:root {
+  --bg: #eef1ee;
+  --surface: #ffffff;
+  --ink: #17231f;
+  --muted: #5f6f68;
+  --line: #d9e0dc;
+  --accent: #1d4e43;
+  --accent-ink: #ffffff;
+  --in: #1f7a4d;
+  --in-bg: #e1f1e8;
+  --out: #b4412f;
+  --out-bg: #f8e4df;
+  --font: "IBM Plex Sans Arabic", "Segoe UI", Tahoma, Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111a17; --surface: #19251f; --ink: #e8efeb; --muted: #94a69d; --line: #2a3a33;
+    --accent: #6cc3a9; --accent-ink: #0d1a15; --in: #62c58f; --in-bg: #1b3a2a; --out: #ee8c79; --out-bg: #3d211b;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111a17; --surface: #19251f; --ink: #e8efeb; --muted: #94a69d; --line: #2a3a33;
+  --accent: #6cc3a9; --accent-ink: #0d1a15; --in: #62c58f; --in-bg: #1b3a2a; --out: #ee8c79; --out-bg: #3d211b;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 16px; line-height: 1.5;
+  padding-block: 20px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+.num { font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: isolate; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+h1 { font-size: 1.35rem; font-weight: 700; margin: 0; }
+.cur { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+
+.balance { background: var(--accent); color: var(--accent-ink); border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+.balance .label { font-size: .9rem; opacity: .85; }
+.balance .big { font-size: 2.4rem; font-weight: 700; line-height: 1.1; }
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.split div { background: rgba(255,255,255,.14); border-radius: 10px; padding: 10px 12px; min-width: 0; }
+:root[data-theme="dark"] .split div { background: rgba(0,0,0,.18); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .split div { background: rgba(0,0,0,.18); } }
+.split small { display: block; font-size: .8rem; opacity: .85; }
+.split b { font-size: 1.15rem; font-weight: 600; overflow-wrap: anywhere; }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--bg); padding: 4px; border-radius: 10px; }
+.seg button { border: 0; background: transparent; padding: 10px; border-radius: 8px; font-weight: 600; cursor: pointer; color: var(--muted); }
+.seg button[aria-pressed="true"].in { background: var(--in); color: #fff; }
+.seg button[aria-pressed="true"].out { background: var(--out); color: #fff; }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field label { font-size: .85rem; color: var(--muted); }
+.field input { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; }
+.field input.amt { font-size: 1.4rem; font-weight: 600; text-align: right; direction: ltr; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.save { border: 0; background: var(--accent); color: var(--accent-ink); font-weight: 700; padding: 13px; border-radius: 10px; cursor: pointer; font-size: 1.05rem; }
+.err { color: var(--out); font-size: .9rem; min-height: 1.2em; margin: 0; }
+
+.tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 14px; cursor: pointer; font-size: .9rem; }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.period { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: .9rem; }
+
+.sample { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; background: var(--surface); border: 1px dashed var(--muted); border-radius: 10px; padding: 10px 12px; font-size: .9rem; }
+.sample button { border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+
+ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+li { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; }
+.dot { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; }
+.dot.in { background: var(--in-bg); color: var(--in); }
+.dot.out { background: var(--out-bg); color: var(--out); }
+.mid { min-width: 0; }
+.mid strong { display: block; overflow-wrap: anywhere; }
+.mid span { font-size: .82rem; color: var(--muted); overflow-wrap: anywhere; }
+.end { text-align: left; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.amount { font-weight: 700; }
+.amount.in { color: var(--in); }
+.amount.out { color: var(--out); }
+.del { border: 0; background: transparent; color: var(--muted); font-size: .8rem; cursor: pointer; padding: 2px 0; text-decoration: underline; }
+.del.sure { color: var(--out); font-weight: 600; }
+.empty { text-align: center; color: var(--muted); padding: 28px 8px; background: var(--surface); border: 1px dashed var(--line); border-radius: 12px; }
+.bk h2 { font-size: 1.05rem; margin: 0; }
+.bk p { margin: 0; color: var(--muted); font-size: .88rem; }
+.bk textarea { width: 100%; min-height: 84px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; direction: ltr; font-size: .8rem; resize: vertical; }
+.bk .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.bk .btns button { border: 1px solid var(--line); background: var(--bg); border-radius: 10px; padding: 11px; font-weight: 600; cursor: pointer; }
+.bk .btns button.sure { background: var(--out); color: #fff; border-color: var(--out); }
+.bk .msg { min-height: 1.2em; font-size: .9rem; }
+.bk .msg.ok { color: var(--in); }
+.bk .msg.bad { color: var(--out); }
+.foot { color: var(--muted); font-size: .8rem; text-align: center; }
+@media (prefers-reduced-motion: no-preference) { button { transition: background .15s, color .15s; } }
+</style>
+
+
+</head>
+<body>
+<div class="wrap" dir="rtl" lang="ar">
+  <header>
+    <h1>دفتر الحساب</h1>
+    <select id="cur" class="cur" aria-label="العملة">
+      <option value="₪">شيكل ₪</option>
+      <option value="$">دولار $</option>
+      <option value="JD">دينار JD</option>
+      <option value="€">يورو €</option>
+      <option value="EGP">جنيه EGP</option>
+      <option value="SAR">ريال SAR</option>
+    </select>
+  </header>
+
+  <section class="balance" aria-live="polite">
+    <div>
+      <div class="label">الرصيد (المستلم − المرسل)</div>
+      <div class="big num" id="net">0</div>
+    </div>
+    <div class="split">
+      <div><small>إجمالي المستلم</small><b class="num" id="tin">0</b></div>
+      <div><small>إجمالي المرسل</small><b class="num" id="tout">0</b></div>
+    </div>
+  </section>
+
+  <form class="card" id="form" novalidate>
+    <div class="seg" role="group" aria-label="نوع العملية">
+      <button type="button" class="in" id="btnIn" aria-pressed="true">⬇ مستلم</button>
+      <button type="button" class="out" id="btnOut" aria-pressed="false">⬆ مرسل</button>
+    </div>
+    <div class="field">
+      <label for="amt">المبلغ</label>
+      <input id="amt" class="amt" type="text" inputmode="decimal" placeholder="0" autocomplete="off">
+    </div>
+    <div class="row2">
+      <div class="field"><label for="who">الاسم</label><input id="who" type="text" placeholder="مثال: أحمد" autocomplete="off"></div>
+      <div class="field"><label for="date">التاريخ</label><input id="date" type="date"></div>
+    </div>
+    <div class="field"><label for="note">ملاحظة (اختياري)</label><input id="note" type="text" placeholder="مثال: دفعة إيجار" autocomplete="off"></div>
+    <p class="err" id="err" role="alert"></p>
+    <button class="save" type="submit">حفظ العملية</button>
+  </form>
+
+  <div class="tools">
+    <div class="chips" role="group" aria-label="تصفية">
+      <button class="chip" data-f="all" aria-pressed="true">الكل</button>
+      <button class="chip" data-f="in" aria-pressed="false">المستلم</button>
+      <button class="chip" data-f="out" aria-pressed="false">المرسل</button>
+    </div>
+    <select id="period" class="period" aria-label="الفترة">
+      <option value="all">كل الفترات</option>
+      <option value="month">هذا الشهر</option>
+      <option value="week">آخر 7 أيام</option>
+    </select>
+  </div>
+
+  <div class="sample" id="sample" hidden>
+    <span>هذه أمثلة للتجربة.</span>
+    <button type="button" id="clearSample">احذف الأمثلة وابدأ</button>
+  </div>
+
+  <ul id="list"></ul>
+
+  <section class="card bk" id="xlCard" aria-label="تصدير إلى إكسل">
+    <h2>تصدير إلى إكسل</h2>
+    <p>ملف إكسل منظّم فيه كل عملياتك مع الرصيد التراكمي، وورقة ملخص حسب الشهر وحسب الاسم.</p>
+    <button type="button" class="save" id="xlExport">تصدير ملف إكسل</button>
+    <div class="msg" id="xlMsg" role="status"></div>
+  </section>
+
+  <p class="foot">البيانات محفوظة على هذا الجهاز فقط.</p>
+</div>
+
+<script>
+(function () {
+  var KEY = "hisabi-v1";
+  var $ = function (id) { return document.getElementById(id); };
+  var state = { cur: "₪", items: [] };
+  var type = "in", filter = "all", pendingDel = null, delTimer = null;
+
+  function today() {
+    var d = new Date();
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+  function daysAgo(n) {
+    var d = new Date(); d.setDate(d.getDate() - n);
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+  function load() {
+    try {
+      var raw = localStorage.getItem(KEY);
+      if (raw) { var s = JSON.parse(raw); if (s && Array.isArray(s.items)) { state = s; return; } }
+    } catch (e) {}
+    state = { cur: "₪", items: [
+      { id: 1, type: "in", amt: 1500, who: "أحمد", note: "مثال: دفعة إيجار", date: daysAgo(3), ex: true },
+      { id: 2, type: "out", amt: 400, who: "محل الخضار", note: "مثال: مشتريات", date: daysAgo(2), ex: true },
+      { id: 3, type: "out", amt: 250, who: "سامي", note: "مثال: سلفة", date: daysAgo(1), ex: true }
+    ] };
+  }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+
+  function fmt(n) {
+    var r = Math.round(n * 100) / 100;
+    return r.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  }
+  function money(n) { return fmt(n) + " " + state.cur; }
+  function parseAmt(s) {
+    s = String(s).replace(/[٠-٩]/g, function (d) { return "٠١٢٣٤٥٦٧٨٩".indexOf(d); })
+                 .replace(/[٫,]/g, ".").replace(/[^\d.]/g, "");
+    return parseFloat(s);
+  }
+  function inPeriod(dateStr) {
+    var p = $("period").value;
+    if (p === "all") return true;
+    if (p === "week") return dateStr >= daysAgo(6);
+    return dateStr.slice(0, 7) === today().slice(0, 7);
+  }
+
+  function render() {
+    $("cur").value = state.cur;
+    var scoped = state.items.filter(function (i) { return inPeriod(i.date); });
+    var tin = 0, tout = 0;
+    scoped.forEach(function (i) { if (i.type === "in") tin += i.amt; else tout += i.amt; });
+    var net = tin - tout;
+    $("tin").textContent = money(tin);
+    $("tout").textContent = money(tout);
+    $("net").textContent = (net < 0 ? "−" : "") + money(Math.abs(net));
+
+    $("sample").hidden = !state.items.some(function (i) { return i.ex; });
+
+    var shown = scoped.filter(function (i) { return filter === "all" || i.type === filter; })
+      .sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : b.id - a.id; });
+
+    var ul = $("list");
+    ul.innerHTML = "";
+    if (!shown.length) {
+      var e = document.createElement("div");
+      e.className = "empty";
+      e.textContent = "لا توجد عمليات هنا بعد. سجّل أول عملية من النموذج أعلاه.";
+      ul.appendChild(e);
+      return;
+    }
+    shown.forEach(function (i) {
+      var li = document.createElement("li");
+      var dot = document.createElement("div");
+      dot.className = "dot " + i.type;
+      dot.textContent = i.type === "in" ? "+" : "−";
+      var mid = document.createElement("div");
+      mid.className = "mid";
+      var st = document.createElement("strong");
+      st.textContent = i.who || (i.type === "in" ? "مستلم" : "مرسل");
+      var sp = document.createElement("span");
+      sp.className = "num";
+      sp.textContent = i.date + (i.note ? " · " + i.note : "");
+      mid.appendChild(st); mid.appendChild(sp);
+      var end = document.createElement("div");
+      end.className = "end";
+      var am = document.createElement("div");
+      am.className = "amount num " + i.type;
+      am.textContent = (i.type === "in" ? "+" : "−") + money(i.amt);
+      var del = document.createElement("button");
+      del.type = "button";
+      del.className = "del" + (pendingDel === i.id ? " sure" : "");
+      del.textContent = pendingDel === i.id ? "تأكيد الحذف؟" : "حذف";
+      del.addEventListener("click", function () {
+        if (pendingDel === i.id) {
+          state.items = state.items.filter(function (x) { return x.id !== i.id; });
+          pendingDel = null; save(); render();
+        } else {
+          pendingDel = i.id; render();
+          clearTimeout(delTimer);
+          delTimer = setTimeout(function () { pendingDel = null; render(); }, 3000);
+        }
+      });
+      end.appendChild(am); end.appendChild(del);
+      li.appendChild(dot); li.appendChild(mid); li.appendChild(end);
+      ul.appendChild(li);
+    });
+  }
+
+  function setType(t) {
+    type = t;
+    $("btnIn").setAttribute("aria-pressed", t === "in");
+    $("btnOut").setAttribute("aria-pressed", t === "out");
+  }
+  $("btnIn").addEventListener("click", function () { setType("in"); });
+  $("btnOut").addEventListener("click", function () { setType("out"); });
+
+  $("form").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    var a = parseAmt($("amt").value);
+    if (!(a > 0)) { $("err").textContent = "اكتب مبلغاً أكبر من صفر."; $("amt").focus(); return; }
+    $("err").textContent = "";
+    var maxId = state.items.reduce(function (m, i) { return Math.max(m, i.id); }, 0);
+    state.items.push({
+      id: maxId + 1, type: type, amt: a,
+      who: $("who").value.trim(), note: $("note").value.trim(),
+      date: $("date").value || today()
+    });
+    $("amt").value = ""; $("who").value = ""; $("note").value = "";
+    save(); render();
+  });
+
+  document.querySelectorAll(".chip").forEach(function (c) {
+    c.addEventListener("click", function () {
+      filter = c.getAttribute("data-f");
+      document.querySelectorAll(".chip").forEach(function (x) {
+        x.setAttribute("aria-pressed", x === c);
+      });
+      render();
+    });
+  });
+  $("period").addEventListener("change", render);
+  $("cur").addEventListener("change", function () { state.cur = $("cur").value; save(); render(); });
+  $("clearSample").addEventListener("click", function () {
+    state.items = state.items.filter(function (i) { return !i.ex; });
+    save(); render();
+  });
+
+  // ---- Excel export ----
+  var downloads = null;
+  function xlMsg(t, ok) { var m = $("xlMsg"); m.textContent = t; m.className = "msg " + (ok ? "ok" : "bad"); }
+  try {
+    if (window.claude && window.claude.use) {
+      window.claude.use("downloads").then(function (d) { downloads = d; }, function () {});
+    }
+  } catch (e) {}
+
+  // ---- Excel export (no external library, works offline) ----
+  var CRC_T = (function () {
+    var t = [], c, n, k;
+    for (n = 0; n < 256; n++) { c = n; for (k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+    return t;
+  })();
+  function crc32(b) { var c = 0xFFFFFFFF; for (var i = 0; i < b.length; i++) c = CRC_T[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+  function u16(v) { return [v & 255, (v >> 8) & 255]; }
+  function u32(v) { return [v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255]; }
+  function zipStore(files) {
+    var enc = new TextEncoder(), chunks = [], central = [], offset = 0;
+    files.forEach(function (f) {
+      var name = enc.encode(f.name), data = enc.encode(f.text), crc = crc32(data), size = data.length;
+      var lh = [].concat(u32(0x04034b50), u16(20), u16(0), u16(0), u16(0), u16(0x21), u32(crc), u32(size), u32(size), u16(name.length), u16(0));
+      chunks.push(new Uint8Array(lh), name, data);
+      central.push(new Uint8Array([].concat(u32(0x02014b50), u16(20), u16(20), u16(0), u16(0), u16(0), u16(0x21), u32(crc), u32(size), u32(size),
+        u16(name.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(offset))), name);
+      offset += lh.length + name.length + size;
+    });
+    var cdSize = 0; central.forEach(function (p) { cdSize += p.length; });
+    var end = new Uint8Array([].concat(u32(0x06054b50), u16(0), u16(0), u16(files.length), u16(files.length), u32(cdSize), u32(offset), u16(0)));
+    var all = chunks.concat(central, [end]), total = 0;
+    all.forEach(function (p) { total += p.length; });
+    var out = new Uint8Array(total), pos = 0;
+    all.forEach(function (p) { out.set(p, pos); pos += p.length; });
+    return out;
+  }
+  function xesc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+  function colL(i) { return String.fromCharCode(64 + i); }
+  function r2(v) { return Math.round(v * 100) / 100; }
+  function serial(d) { var p = d.split("-"); return Math.round(Date.UTC(+p[0], +p[1] - 1, +p[2]) / 86400000) + 25569; }
+
+  function SheetX() { this.rows = {}; this.ht = {}; }
+  SheetX.prototype.put = function (r, c, xml) { (this.rows[r] = this.rows[r] || {})[c] = xml; };
+  SheetX.prototype.n = function (r, c, v, s) { this.put(r, c, '<c r="' + colL(c) + r + '" s="' + s + '"><v>' + v + "</v></c>"); };
+  SheetX.prototype.t = function (r, c, v, s) { this.put(r, c, '<c r="' + colL(c) + r + '" s="' + s + '" t="inlineStr"><is><t xml:space="preserve">' + xesc(v) + "</t></is></c>"); };
+  SheetX.prototype.f = function (r, c, f, v, s) { this.put(r, c, '<c r="' + colL(c) + r + '" s="' + s + '"><f>' + xesc(f) + "</f><v>" + v + "</v></c>"); };
+  SheetX.prototype.xml = function (o) {
+    var self = this, rows = Object.keys(this.rows).map(Number).sort(function (a, b) { return a - b; });
+    var sd = rows.map(function (r) {
+      var cs = Object.keys(self.rows[r]).map(Number).sort(function (a, b) { return a - b; }).map(function (c) { return self.rows[r][c]; }).join("");
+      return '<row r="' + r + '"' + (self.ht[r] ? ' ht="' + self.ht[r] + '" customHeight="1"' : "") + ">" + cs + "</row>";
+    }).join("");
+    var cols = o.widths.map(function (w, i) { return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>'; }).join("");
+    var pane = o.freeze ? '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A2" sqref="A2"/>' : "";
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><sheetViews><sheetView rightToLeft="1" workbookViewId="0"' + (o.active ? ' tabSelected="1"' : "") + ">" + pane + "</sheetView></sheetViews>" +
+      '<sheetFormatPr defaultRowHeight="15"/><cols>' + cols + "</cols><sheetData>" + sd + "</sheetData>" +
+      (o.filter ? '<autoFilter ref="' + o.filter + '"/>' : "") + (o.merge ? '<mergeCells count="1"><mergeCell ref="' + o.merge + '"/></mergeCells>' : "") +
+      '<pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/><pageSetup orientation="' + o.orient + '" fitToWidth="1" fitToHeight="0"/></worksheet>';
+  };
+
+  function stylesXml(cur) {
+    var money = '#,##0.00 "' + cur + '"';
+    function font(b, sz, color) { return "<font>" + (b ? "<b/>" : "") + '<sz val="' + sz + '"/>' + (color ? '<color rgb="' + color + '"/>' : "") + '<name val="Arial"/></font>'; }
+    var fonts = [font(0, 11), font(1, 11), font(1, 11, "FFFFFFFF"), font(1, 16, "FF1D4E43"), font(1, 11, "FF1F7A4D"), font(1, 11, "FFB4412F"), font(1, 12, "FF1D4E43")];
+    function fill(rgb) { return '<fill><patternFill patternType="solid"><fgColor rgb="' + rgb + '"/><bgColor indexed="64"/></patternFill></fill>'; }
+    var fills = ['<fill><patternFill patternType="none"/></fill>', '<fill><patternFill patternType="gray125"/></fill>', fill("FF1D4E43"), fill("FFE1F1E8"), fill("FFF8E4DF"), fill("FFEEF1EE")];
+    var th = '<color rgb="FFD9E0DC"/>';
+    var borders = ["<border><left/><right/><top/><bottom/><diagonal/></border>",
+      '<border><left style="thin">' + th + '</left><right style="thin">' + th + '</right><top style="thin">' + th + '</top><bottom style="thin">' + th + '</bottom><diagonal/></border>'];
+    var xfs = [], ST = {};
+    function def(name, fo, fi, bo, fmt, center) {
+      ST[name] = xfs.length;
+      xfs.push('<xf numFmtId="' + fmt + '" fontId="' + fo + '" fillId="' + fi + '" borderId="' + bo + '" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1"' +
+        (center ? ' applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>' : "/>"));
+    }
+    def("def", 0, 0, 0, 0); def("head", 2, 2, 1, 0, 1);
+    def("inC", 0, 3, 1, 0, 1); def("outC", 0, 4, 1, 0, 1); def("inT", 0, 3, 1, 0); def("outT", 0, 4, 1, 0);
+    def("inD", 0, 3, 1, 164, 1); def("outD", 0, 4, 1, 164, 1); def("inM", 0, 3, 1, 165); def("outM", 0, 4, 1, 165);
+    def("inL", 4, 3, 1, 0, 1); def("outL", 5, 4, 1, 0, 1); def("bal", 1, 0, 1, 165);
+    def("title", 3, 0, 0, 0); def("sec", 6, 0, 0, 0);
+    def("lbl", 1, 0, 1, 0); def("lblIn", 1, 3, 1, 0); def("lblOut", 1, 4, 1, 0); def("lblGrey", 1, 5, 1, 0);
+    def("mB", 1, 0, 1, 165); def("mBIn", 1, 3, 1, 165); def("mBOut", 1, 4, 1, 165); def("mBGrey", 1, 5, 1, 165);
+    def("midC", 0, 0, 1, 0, 1); def("txt", 0, 0, 1, 0); def("money", 0, 0, 1, 165); def("dateB", 0, 0, 1, 164, 1); def("cnt", 1, 5, 1, 1);
+    var xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<numFmts count="2"><numFmt numFmtId="164" formatCode="yyyy\\-mm\\-dd"/><numFmt numFmtId="165" formatCode="' + xesc(money) + '"/></numFmts>' +
+      '<fonts count="' + fonts.length + '">' + fonts.join("") + '</fonts><fills count="' + fills.length + '">' + fills.join("") + '</fills>' +
+      '<borders count="' + borders.length + '">' + borders.join("") + '</borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+      '<cellXfs count="' + xfs.length + '">' + xfs.join("") + '</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+    return { xml: xml, ST: ST };
+  }
+
+  async function buildXlsx(items) {
+    var sty = stylesXml(state.cur), ST = sty.ST;
+    var sorted = items.slice().sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id; });
+    var n = sorted.length, last = n + 1;
+
+    var ws = new SheetX(); ws.ht[1] = 24;
+    ["#", "التاريخ", "النوع", "الاسم", "المبلغ", "ملاحظة", "الرصيد التراكمي"].forEach(function (h, i) { ws.t(1, i + 1, h, ST.head); });
+    var bal = 0, tin = 0, tout = 0, months = {}, people = {};
+    sorted.forEach(function (it, idx) {
+      var r = idx + 2, isIn = it.type === "in", nm = it.who || "بدون اسم", ym = it.date.slice(0, 7);
+      bal += isIn ? it.amt : -it.amt;
+      if (isIn) tin += it.amt; else tout += it.amt;
+      months[ym] = months[ym] || { i: 0, o: 0 }; people[nm] = people[nm] || { i: 0, o: 0 };
+      if (isIn) { months[ym].i += it.amt; people[nm].i += it.amt; } else { months[ym].o += it.amt; people[nm].o += it.amt; }
+      ws.n(r, 1, idx + 1, isIn ? ST.inC : ST.outC);
+      ws.n(r, 2, serial(it.date), isIn ? ST.inD : ST.outD);
+      ws.t(r, 3, isIn ? "مستلم" : "مرسل", isIn ? ST.inL : ST.outL);
+      ws.t(r, 4, nm, isIn ? ST.inT : ST.outT);
+      ws.n(r, 5, it.amt, isIn ? ST.inM : ST.outM);
+      ws.t(r, 6, it.note || "", isIn ? ST.inT : ST.outT);
+      var f = idx === 0 ? 'IF(C2="مستلم",E2,-E2)' : "G" + (r - 1) + '+IF(C' + r + '="مستلم",E' + r + ",-E" + r + ")";
+      ws.f(r, 7, f, r2(bal), ST.bal);
+    });
+    var sheet1 = ws.xml({ widths: [7, 14, 12, 24, 18, 32, 20], freeze: true, filter: "A1:G" + last, orient: "landscape", active: false });
+
+    var L = "'العمليات'!";
+    var rT = L + "$C$2:$C$" + last, rD = L + "$D$2:$D$" + last, rE = L + "$E$2:$E$" + last, rB = L + "$B$2:$B$" + last;
+    var sm = new SheetX(); sm.ht[1] = 28;
+    sm.t(1, 1, "دفتر الحساب: الملخص", ST.title);
+    var now = new Date(), todayStr = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
+    sm.t(2, 1, "تاريخ التصدير", ST.lbl); sm.n(2, 2, serial(todayStr), ST.dateB);
+    sm.t(4, 1, "إجمالي المستلم", ST.lblIn); sm.f(4, 2, 'SUMIF(' + rT + ',"مستلم",' + rE + ")", r2(tin), ST.mBIn);
+    sm.t(5, 1, "إجمالي المرسل", ST.lblOut); sm.f(5, 2, 'SUMIF(' + rT + ',"مرسل",' + rE + ")", r2(tout), ST.mBOut);
+    sm.t(6, 1, "الرصيد (المستلم − المرسل)", ST.lblGrey); sm.f(6, 2, "B4-B5", r2(tin - tout), ST.mBGrey);
+    sm.t(7, 1, "عدد العمليات", ST.lblGrey); sm.f(7, 2, "COUNT(" + rE + ")", n, ST.cnt);
+
+    var r = 9;
+    sm.t(r, 1, "حسب الشهر", ST.sec); r++;
+    ["الشهر", "مستلم", "مرسل", "الصافي"].forEach(function (h, i) { sm.t(r, i + 1, h, ST.head); });
+    var mFirst = r + 1;
+    Object.keys(months).sort().forEach(function (ym) {
+      r++;
+      var y = +ym.slice(0, 4), m = +ym.slice(5, 7), ny = m === 12 ? y + 1 : y, nm2 = m === 12 ? 1 : m + 1;
+      var rng = "," + rB + ',">="&DATE(' + y + "," + m + ",1)," + rB + ',"<"&DATE(' + ny + "," + nm2 + ",1)";
+      sm.t(r, 1, ym, ST.midC);
+      sm.f(r, 2, "SUMIFS(" + rE + "," + rT + ',"مستلم"' + rng + ")", r2(months[ym].i), ST.money);
+      sm.f(r, 3, "SUMIFS(" + rE + "," + rT + ',"مرسل"' + rng + ")", r2(months[ym].o), ST.money);
+      sm.f(r, 4, "B" + r + "-C" + r, r2(months[ym].i - months[ym].o), ST.money);
+    });
+    r++; sm.t(r, 1, "المجموع", ST.lbl);
+    sm.f(r, 2, "SUM(B" + mFirst + ":B" + (r - 1) + ")", r2(tin), ST.mB); sm.f(r, 3, "SUM(C" + mFirst + ":C" + (r - 1) + ")", r2(tout), ST.mB);
+    sm.f(r, 4, "B" + r + "-C" + r, r2(tin - tout), ST.mB);
+
+    r += 2;
+    sm.t(r, 1, "حسب الاسم", ST.sec); r++;
+    ["الاسم", "مستلم", "مرسل", "الصافي"].forEach(function (h, i) { sm.t(r, i + 1, h, ST.head); });
+    var pFirst = r + 1;
+    Object.keys(people).sort(function (a, b) { return a.localeCompare(b, "ar"); }).forEach(function (nm) {
+      r++;
+      sm.t(r, 1, nm, ST.txt);
+      var crit = "," + rD + ",A" + r;
+      sm.f(r, 2, "SUMIFS(" + rE + "," + rT + ',"مستلم"' + crit + ")", r2(people[nm].i), ST.money);
+      sm.f(r, 3, "SUMIFS(" + rE + "," + rT + ',"مرسل"' + crit + ")", r2(people[nm].o), ST.money);
+      sm.f(r, 4, "B" + r + "-C" + r, r2(people[nm].i - people[nm].o), ST.money);
+    });
+    r++; sm.t(r, 1, "المجموع", ST.lbl);
+    sm.f(r, 2, "SUM(B" + pFirst + ":B" + (r - 1) + ")", r2(tin), ST.mB); sm.f(r, 3, "SUM(C" + pFirst + ":C" + (r - 1) + ")", r2(tout), ST.mB);
+    sm.f(r, 4, "B" + r + "-C" + r, r2(tin - tout), ST.mB);
+    var sheet2 = sm.xml({ widths: [30, 20, 20, 20], merge: "A1:D1", orient: "portrait", active: true });
+
+    var H = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+    var files = [
+      { name: "[Content_Types].xml", text: H + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>' },
+      { name: "_rels/.rels", text: H + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>' },
+      { name: "xl/workbook.xml", text: H + '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView activeTab="1"/></bookViews><sheets><sheet name="العمليات" sheetId="1" r:id="rId1"/><sheet name="الملخص" sheetId="2" r:id="rId2"/></sheets><calcPr fullCalcOnLoad="1"/></workbook>' },
+      { name: "xl/_rels/workbook.xml.rels", text: H + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>' },
+      { name: "xl/styles.xml", text: sty.xml },
+      { name: "xl/worksheets/sheet1.xml", text: sheet1 },
+      { name: "xl/worksheets/sheet2.xml", text: sheet2 }
+    ];
+    return new Blob([zipStore(files)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  }
+
+  $("xlExport").addEventListener("click", async function () {
+    var btn = $("xlExport");
+    var items = state.items.filter(function (i) { return !i.ex; });
+    if (!items.length) { xlMsg("لا توجد عمليات لتصديرها بعد. سجّل عملياتك أولاً.", false); return; }
+    btn.disabled = true; xlMsg("جارٍ تجهيز الملف...", true);
+    try {
+      var blob = await buildXlsx(items);
+      var fname = "دفتر_الحساب_" + today() + ".xlsx";
+      if (downloads) { await downloads.save({ filename: fname, data: blob }); }
+      else {
+        var url = URL.createObjectURL(blob), a = document.createElement("a");
+        a.href = url; a.download = fname; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
+      }
+      xlMsg("تم تجهيز الملف (" + items.length + " عملية).", true);
+    } catch (e) {
+      var c = e && e.code;
+      xlMsg(c === "declined" ? "تم إلغاء الحفظ." : c === "rate_limited" ? "انتظر لحظة ثم حاول مرة ثانية." : "تعذّر التصدير. حدّث الصفحة وحاول مرة ثانية.", false);
+    } finally { btn.disabled = false; }
+  });
+
+  $("date").value = today();
+  load();
+  render();
+})();
+</script>
+<script>
+if ("serviceWorker" in navigator && /^https?:/.test(location.protocol)) {
+  window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });
+}
+</script>
+</body>
+</html>
